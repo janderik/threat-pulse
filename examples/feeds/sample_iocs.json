@@ -1,0 +1,64 @@
+{
+  "iocs": [
+    {
+      "value": "185.220.101.42",
+      "type": "ip",
+      "confidence": "high",
+      "description": "Known C2 server associated with Emotet",
+      "tags": ["emotet", "c2", "malware", "botnet"],
+      "severity": 8.5,
+      "mitre_id": "T1071",
+      "reference_urls": ["https://www.cisa.gov/known-exploited-vulnerabilities"]
+    },
+    {
+      "value": "evil-malware-domain.com",
+      "type": "domain",
+      "confidence": "medium",
+      "description": "Malicious domain serving malware payloads",
+      "tags": ["malware", "phishing", "payload-delivery"],
+      "severity": 7.0
+    },
+    {
+      "value": "https://phishing-site.com/login",
+      "type": "url",
+      "confidence": "high",
+      "description": "Credential phishing page targeting banking users",
+      "tags": ["phishing", "credential-theft", "banking"],
+      "severity": 9.0
+    },
+    {
+      "value": "d41d8cd98f00b204e9800998ecf8427e",
+      "type": "md5",
+      "confidence": "medium",
+      "description": "MD5 hash of known malicious binary",
+      "tags": ["malware", "binary"],
+      "severity": 6.5
+    },
+    {
+      "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "type": "sha256",
+      "confidence": "high",
+      "description": "SHA256 hash of ransomware sample",
+      "tags": ["ransomware", "malware"],
+      "severity": 9.5,
+      "mitre_id": "T1486"
+    },
+    {
+      "value": "CVE-2024-3094",
+      "type": "cve",
+      "confidence": "critical",
+      "description": "XZ Utils backdoor (CVE-2024-3094) - supply chain compromise",
+      "tags": ["cve", "supply-chain", "backdoor", "critical"],
+      "severity": 10.0,
+      "reference_urls": ["https://nvd.nist.gov/vuln/detail/CVE-2024-3094"]
+    },
+    {
+      "value": "suspicious-actor@example.com",
+      "type": "email",
+      "confidence": "low",
+      "description": "Email address used in phishing campaigns",
+      "tags": ["phishing", "email"],
+      "severity": 4.0
+    }
+  ]
+}

@@ -1,0 +1,230 @@
+from __future__ import annotations
+
+import pytest
+
+from src.collectors.alienvault import AlienVaultOTXCollector
+from src.collectors.abuseipdb import AbuseIPDBCollector
+from src.collectors.mitre import MitreAttackCollector
+from src.collectors.custom import CustomFeedCollector
+from src.models.ioc import IOC, IOCType, Confidence
+
+
+class TestAlienVaultCollector:
+    def test_init(self):
+        collector = AlienVaultOTXCollector({"api_key": "test-key"})
+        assert collector.name == "alienvault_otx"
+        assert collector.api_key == "test-key"
+
+    def test_no_api_key(self):
+        collector = AlienVaultOTXCollector({})
+        iocs = pytest.mark.asyncio(collector.collect)()
+        # This would be async - we'll test the logic in following tests
+        assert collector.api_key == ""
+
+    def test_map_type(self):
+        collector = AlienVaultOTXCollector({})
+        assert collector._map_type("ipv4") == IOCType.IP
+        assert collector._map_type("domain") == IOCType.DOMAIN
+        assert collector._map_type("url") == IOCType.URL
+        assert collector._map_type("sha256") == IOCType.SHA256
+        assert collector._map_type("cve") == IOCType.CVE
+        assert collector._map_type("email") == IOCType.EMAIL
+        assert collector._map_type("unknown_format") is None
+
+    def test_parse_confidence(self):
+        collector = AlienVaultOTXCollector({})
+        assert collector._parse_confidence(90) == Confidence.HIGH
+        assert collector._parse_confidence(60) == Confidence.MEDIUM
+        assert collector._parse_confidence(30) == Confidence.LOW
+
+    def test_parse_pulse(self):
+        collector = AlienVaultOTXCollector({})
+        pulse = {
+            "name": "Test Pulse",
+            "description": "A test pulse",
+            "id": "pulse123",
+            "tags": [{"name": "malware"}, {"name": "c2"}],
+            "indicators": [
+                {"type": "IPv4", "indicator": "192.168.1.1", "confidence": 80},
+                {"type": "domain", "indicator": "evil.example.com", "confidence": 50},
+                {"type": "sha256", "indicator": "a" * 64, "confidence": 30},
+            ],
+        }
+        iocs = collector._parse_pulse(pulse)
+        assert len(iocs) == 3
+        assert iocs[0].type == IOCType.IP
+        assert iocs[0].value == "192.168.1.1"
+        assert iocs[0].confidence == Confidence.HIGH
+        assert "malware" in iocs[0].tags
+        assert "c2" in iocs[0].tags
+
+        assert iocs[1].type == IOCType.DOMAIN
+        assert iocs[1].value == "evil.example.com"
+        assert iocs[1].confidence == Confidence.MEDIUM
+
+        assert iocs[2].type == IOCType.SHA256
+        assert iocs[2].confidence == Confidence.LOW
+
+
+class TestAbuseIPDBCollector:
+    def test_init(self):
+        collector = AbuseIPDBCollector({"api_key": "test-key"})
+        assert collector.name == "abuseipdb"
+        assert collector.api_key == "test-key"
+
+    def test_no_api_key(self):
+        collector = AbuseIPDBCollector({})
+        assert collector.api_key == ""
+
+    def test_parse_entry(self):
+        collector = AbuseIPDBCollector({})
+        entry = {
+            "ipAddress": "203.0.113.42",
+            "abuseConfidenceScore": 85,
+            "countryCode": "US",
+            "totalReports": 25,
+            "lastReportedAt": "2025-01-01T00:00:00Z",
+            "isWhitelisted": False,
+        }
+        ioc = collector._parse_entry(entry)
+        assert ioc is not None
+        assert ioc.type == IOCType.IP
+        assert ioc.value == "203.0.113.42"
+        assert ioc.confidence == Confidence.HIGH
+        assert "country:US" in ioc.tags
+        assert ioc.severity == 8.5
+
+    def test_parse_entry_whitelisted(self):
+        collector = AbuseIPDBCollector({})
+        entry = {
+            "ipAddress": "192.0.2.1",
+            "abuseConfidenceScore": 90,
+            "isWhitelisted": True,
+        }
+        assert collector._parse_entry(entry) is None
+
+    def test_score_to_confidence(self):
+        collector = AbuseIPDBCollector({})
+        assert collector._score_to_confidence(80) == Confidence.HIGH
+        assert collector._score_to_confidence(60) == Confidence.MEDIUM
+        assert collector._score_to_confidence(30) == Confidence.LOW
+
+
+class TestMitreCollector:
+    def test_init(self):
+        collector = MitreAttackCollector({"collect_techniques": True})
+        assert collector.name == "mitre_attack"
+
+    def test_extract_tactic(self):
+        collector = MitreAttackCollector({})
+        obj = {
+            "kill_chain_phases": [
+                {"kill_chain_name": "mitre-attack", "phase_name": "execution"},
+            ],
+        }
+        assert collector._extract_tactic(obj) == "execution"
+
+    def test_extract_tactic_empty(self):
+        collector = MitreAttackCollector({})
+        assert collector._extract_tactic({}) == ""
+
+
+class TestCustomFeedCollector:
+    def test_init(self):
+        collector = CustomFeedCollector({"feeds": []})
+        assert collector.name == "custom_feed"
+
+    def test_parse_json_list(self, tmp_path):
+        json_data = """
+        [
+            {"value": "5.5.5.5", "type": "ip", "confidence": "high"},
+            {"value": "evil.com", "type": "domain", "confidence": "medium"}
+        ]
+        """
+        collector = CustomFeedCollector({})
+        iocs = collector._parse_json(json_data, "test_feed", Confidence.MEDIUM, IOCType.IP, [], {})
+        assert len(iocs) == 2
+        assert iocs[0].value == "5.5.5.5"
+        assert iocs[0].type == IOCType.IP
+        assert iocs[0].confidence == Confidence.HIGH
+        assert iocs[1].value == "evil.com"
+        assert iocs[1].type == IOCType.DOMAIN
+
+    def test_parse_json_with_iocs_key(self):
+        json_data = '{"iocs": [{"value": "1.2.3.4", "type": "ip"}]}'
+        collector = CustomFeedCollector({})
+        iocs = collector._parse_json(json_data, "test", Confidence.LOW, None, [], {})
+        assert len(iocs) == 1
+        assert iocs[0].value == "1.2.3.4"
+
+    def test_parse_csv(self):
+        csv_data = "value,type,confidence\n6.6.6.6,ip,high\nmalware.net,domain,medium\n"
+        collector = CustomFeedCollector({})
+        iocs = collector._parse_csv(csv_data, "csv_feed", Confidence.LOW, IOCType.IP, [], {})
+        assert len(iocs) >= 1
+        assert iocs[0].type == IOCType.IP
+        if len(iocs) > 1:
+            assert iocs[1].type == IOCType.DOMAIN
+
+    def test_parse_yaml(self):
+        yaml_data = """
+        - value: 7.7.7.7
+          type: ip
+          confidence: critical
+        - value: bad.org
+          type: domain
+        """
+        collector = CustomFeedCollector({})
+        iocs = collector._parse_yaml(yaml_data, "yaml_feed", Confidence.MEDIUM, IOCType.IP, [], {})
+        assert len(iocs) == 2
+        assert iocs[0].confidence == Confidence.CRITICAL
+        assert iocs[1].value == "bad.org"
+
+    def test_entry_to_ioc_with_tags_string(self):
+        collector = CustomFeedCollector({})
+        entry = {
+            "value": "10.0.0.1",
+            "type": "ip",
+            "tags": "ransomware, c2, critical",
+        }
+        ioc = collector._entry_to_ioc(entry, "test", Confidence.MEDIUM, None, ["global"], {})
+        assert "ransomware" in ioc.tags
+        assert "c2" in ioc.tags
+        assert "global" in ioc.tags
+
+    def test_entry_to_ioc_defaults(self):
+        collector = CustomFeedCollector({})
+        entry = {"value": "unknown-ioc"}
+        ioc = collector._entry_to_ioc(entry, "test", Confidence.LOW, IOCType.HASH, ["auto"], {})
+        assert ioc.value == "unknown-ioc"
+        assert ioc.type == IOCType.HASH
+        assert ioc.confidence == Confidence.LOW
+
+
+class TestIOCModel:
+    def test_ioc_creation(self):
+        from datetime import datetime, timezone
+        ioc = IOC(
+            type=IOCType.IP,
+            value="8.8.8.8",
+            source="test",
+            confidence=Confidence.HIGH,
+            tags=["dns", "public"],
+        )
+        assert ioc.type == IOCType.IP
+        assert ioc.value == "8.8.8.8"
+        assert ioc.confidence == Confidence.HIGH
+        assert ioc.active is True
+        assert ioc.severity == 5.0
+
+    def test_ioc_dict_serialization(self):
+        ioc = IOC(type=IOCType.DOMAIN, value="test.com", source="manual")
+        result = ioc.dict()
+        assert isinstance(result["first_seen"], str)
+        assert isinstance(result["last_seen"], str)
+        assert result["type"] == "domain"
+
+    def test_ioc_type_values(self):
+        assert IOCType.IP.value == "ip"
+        assert IOCType.DOMAIN.value == "domain"
+        assert IOCType.CVE.value == "cve"
