@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from src.api.server import db
+from src.api.state import get_db
 from src.models.ioc import IOC, IOCType, Confidence, IocCreate, IocResponse
 from src.models.threat import Threat, ThreatCreate, ThreatResponse, ThreatStatus
 
@@ -21,8 +21,8 @@ router = APIRouter()
 async def health_check():
     return {
         "status": "ok",
-        "iocs_total": db.count_iocs(),
-        "threats_total": db.count_threats(),
+        "iocs_total": get_db().count_iocs(),
+        "threats_total": get_db().count_threats(),
     }
 
 
@@ -42,13 +42,13 @@ async def create_ioc(payload: IocCreate):
         mitre_id=payload.mitre_id,
         reference_urls=payload.reference_urls,
     )
-    stored = db.store_ioc(ioc)
+    stored = get_db().store_ioc(ioc)
     return _ioc_to_response(stored)
 
 
 @router.get("/iocs/{ioc_id}", response_model=IocResponse)
 async def get_ioc(ioc_id: str):
-    ioc = db.get_ioc(ioc_id)
+    ioc = get_db().get_ioc(ioc_id)
     if not ioc:
         raise HTTPException(status_code=404, detail="IOC not found")
     return _ioc_to_response(ioc)
@@ -64,7 +64,7 @@ async def list_iocs(
     limit: int = Query(100, le=1000),
     offset: int = Query(0, ge=0),
 ):
-    iocs = db.search_iocs(
+    iocs = get_db().search_iocs(
         value=value,
         ioc_type=type,
         source=source,
@@ -78,7 +78,7 @@ async def list_iocs(
 
 @router.delete("/iocs/{ioc_id}", status_code=204)
 async def delete_ioc(ioc_id: str):
-    if not db.delete_ioc(ioc_id):
+    if not get_db().delete_ioc(ioc_id):
         raise HTTPException(status_code=404, detail="IOC not found")
 
 
@@ -99,13 +99,13 @@ async def create_threat(payload: ThreatCreate):
         campaign=payload.campaign,
         tags=payload.tags,
     )
-    stored = db.store_threat(threat)
+    stored = get_db().store_threat(threat)
     return _threat_to_response(stored)
 
 
 @router.get("/threats/{threat_id}", response_model=ThreatResponse)
 async def get_threat(threat_id: str):
-    threat = db.get_threat(threat_id)
+    threat = get_db().get_threat(threat_id)
     if not threat:
         raise HTTPException(status_code=404, detail="Threat not found")
     return _threat_to_response(threat)
@@ -120,7 +120,7 @@ async def list_threats(
     limit: int = Query(100, le=1000),
     offset: int = Query(0, ge=0),
 ):
-    threats = db.search_threats(
+    threats = get_db().search_threats(
         name=name,
         status=status,
         source=source,
@@ -133,20 +133,20 @@ async def list_threats(
 
 @router.patch("/threats/{threat_id}/status", response_model=ThreatResponse)
 async def update_threat_status(threat_id: str, status: ThreatStatus):
-    threat = db.get_threat(threat_id)
+    threat = get_db().get_threat(threat_id)
     if not threat:
         raise HTTPException(status_code=404, detail="Threat not found")
     threat = threat.model_copy(update={"status": status, "updated_at": None})
     from datetime import datetime, timezone
 
     threat.updated_at = datetime.now(timezone.utc)
-    stored = db.store_threat(threat)
+    stored = get_db().store_threat(threat)
     return _threat_to_response(stored)
 
 
 @router.delete("/threats/{threat_id}", status_code=204)
 async def delete_threat(threat_id: str):
-    if not db.delete_threat(threat_id):
+    if not get_db().delete_threat(threat_id):
         raise HTTPException(status_code=404, detail="Threat not found")
 
 
@@ -158,8 +158,8 @@ async def search_all(
     q: str = Query(..., min_length=1),
     limit: int = Query(50, le=200),
 ):
-    iocs = db.search_iocs(value=q, limit=limit)
-    threats = db.search_threats(name=q, limit=limit)
+    iocs = get_db().search_iocs(value=q, limit=limit)
+    threats = get_db().search_threats(name=q, limit=limit)
     return {
         "query": q,
         "iocs": [_ioc_to_response(i) for i in iocs],
@@ -173,8 +173,8 @@ async def search_all(
 @router.get("/stats")
 async def stats():
     return {
-        "total_iocs": db.count_iocs(),
-        "total_threats": db.count_threats(),
+        "total_iocs": get_db().count_iocs(),
+        "total_threats": get_db().count_threats(),
     }
 
 

@@ -1,6 +1,6 @@
 # ThreatPulse
 
-[![CI](https://github.com/user/threatpulse/actions/workflows/ci.yml/badge.svg)](https://github.com/user/threatpulse/actions/workflows/ci.yml)
+[![CI](https://github.com/janderik/threat-pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/janderik/threat-pulse/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
@@ -69,8 +69,8 @@
 
 ```bash
 # Clone and install
-git clone https://github.com/user/threatpulse.git
-cd threatpulse
+git clone https://github.com/janderik/threat-pulse.git
+cd threat-pulse
 pip install -r requirements.txt
 pip install -e .
 

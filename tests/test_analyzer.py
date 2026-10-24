@@ -225,10 +225,21 @@ class TestCorrelator:
         assert len(shared["ioc-b"]) == 2
         assert "ioc-d" not in shared
 
-    def test_are_related_same_type_source(self):
+    def test_same_type_and_source_alone_is_not_evidence(self):
+        # Two unrelated IPs from the same feed must not correlate by default.
+        a = self._make_ioc("a", IOCType.IP, "same_source", tags=["foo"])
+        b = self._make_ioc("b", IOCType.IP, "same_source", tags=["bar"])
+        assert not self.correlator._are_related(a, b, threshold=1.0)
+
+    def test_shared_tag_relates_iocs(self):
         a = self._make_ioc("a", IOCType.IP, "same_source", tags=["foo"])
         b = self._make_ioc("b", IOCType.IP, "same_source", tags=["foo"])
-        assert self.correlator._are_related(a, b, threshold=2.0)
+        assert self.correlator._are_related(a, b, threshold=1.0)
+
+    def test_shared_mitre_technique_outweighs_context(self):
+        a = self._make_ioc("a", IOCType.IP, "src1", mitre_id="T1071")
+        b = self._make_ioc("b", IOCType.DOMAIN, "src2", mitre_id="T1071")
+        assert self.correlator._are_related(a, b, threshold=3.0)
 
     def test_are_related_different(self):
         a = self._make_ioc("a", IOCType.IP, "src1", tags=["x"])

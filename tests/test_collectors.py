@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 import pytest
 
 from src.collectors.alienvault import AlienVaultOTXCollector
@@ -15,11 +16,12 @@ class TestAlienVaultCollector:
         assert collector.name == "alienvault_otx"
         assert collector.api_key == "test-key"
 
-    def test_no_api_key(self):
+    @pytest.mark.asyncio
+    async def test_no_api_key(self):
         collector = AlienVaultOTXCollector({})
-        iocs = pytest.mark.asyncio(collector.collect)()
-        # This would be async - we'll test the logic in following tests
         assert collector.api_key == ""
+        # Without a key the collector must skip the network call entirely.
+        assert await collector.collect() == []
 
     def test_map_type(self):
         collector = AlienVaultOTXCollector({})
@@ -93,6 +95,7 @@ class TestAbuseIPDBCollector:
         assert ioc.confidence == Confidence.HIGH
         assert "country:US" in ioc.tags
         assert ioc.severity == 8.5
+        assert ioc.last_seen.isoformat() == "2025-01-01T00:00:00+00:00"
 
     def test_parse_entry_whitelisted(self):
         collector = AbuseIPDBCollector({})
@@ -127,6 +130,73 @@ class TestMitreCollector:
     def test_extract_tactic_empty(self):
         collector = MitreAttackCollector({})
         assert collector._extract_tactic({}) == ""
+
+
+def _attack(obj_type, mitre_id, name, **extra):
+    refs = (
+        [
+            {
+                "source_name": "mitre-attack",
+                "external_id": mitre_id,
+                "url": f"https://attack.mitre.org/x/{mitre_id}",
+            }
+        ]
+        if mitre_id
+        else []
+    )
+    return {"type": obj_type, "name": name, "external_references": refs, **extra}
+
+
+ATTACK_BUNDLE = {
+    "type": "bundle",
+    "objects": [
+        _attack(
+            "attack-pattern",
+            "T1059.001",
+            "PowerShell",
+            kill_chain_phases=[
+                {"kill_chain_name": "mitre-attack", "phase_name": "execution"}
+            ],
+        ),
+        _attack("attack-pattern", "T9999", "Old technique", revoked=True),
+        _attack("attack-pattern", "T9998", "Deprecated", x_mitre_deprecated=True),
+        _attack("attack-pattern", "", "No ATT&CK id"),
+        _attack("malware", "S0002", "Mimikatz"),
+        _attack("tool", "S0039", "Net"),
+        _attack("intrusion-set", "G0007", "APT28"),
+    ],
+}
+
+
+@pytest.mark.asyncio
+async def test_mitre_collect_parses_bundle_with_single_download():
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url)
+        return httpx.Response(200, json=ATTACK_BUNDLE)
+
+    collector = MitreAttackCollector({})
+    collector._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    iocs = await collector.collect()
+
+    assert len(requests) == 1
+    by_id = {i.mitre_id: i for i in iocs}
+    assert set(by_id) == {"T1059.001", "S0002", "S0039", "G0007"}
+    assert by_id["T1059.001"].value == "https://attack.mitre.org/techniques/T1059/001/"
+    assert "execution" in by_id["T1059.001"].tags
+    assert by_id["S0002"].value == "https://attack.mitre.org/software/S0002/"
+    assert "malware" in by_id["S0002"].tags
+    assert by_id["G0007"].value == "https://attack.mitre.org/groups/G0007/"
+
+
+@pytest.mark.asyncio
+async def test_mitre_collect_survives_download_failure():
+    collector = MitreAttackCollector({})
+    collector._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(503))
+    )
+    assert await collector.collect() == []
 
 
 class TestCustomFeedCollector:

@@ -10,7 +10,17 @@ logger = logging.getLogger(__name__)
 
 
 class Correlator:
-    """Correlates IOCs and threats to find related entities."""
+    """Correlates IOCs and threats to find related entities.
+
+    Relatedness is scored from *evidence* that two indicators belong together
+    (a shared ATT&CK technique, shared tags). Same type or same source is only
+    weak context: on its own it must not relate two indicators, otherwise every
+    IP from the same feed would correlate with every other one.
+    """
+
+    MITRE_WEIGHT = 3.0
+    TAG_WEIGHT = 1.0
+    CONTEXT_WEIGHT = 0.25  # same type / same source
 
     def correlate_iocs(
         self, iocs: list[IOC], threshold: float = 3.0
@@ -42,6 +52,7 @@ class Correlator:
         self,
         threat: Threat,
         all_iocs: list[IOC],
+        threshold: float = 1.0,
     ) -> list[IOC]:
         """Find IOCs related to a given threat's IOCs."""
         threat_ioc_ids = set(threat.ioc_ids)
@@ -54,7 +65,7 @@ class Correlator:
             for other in all_iocs:
                 if other.id in threat_ioc_ids or other.id in correlated_ids:
                     continue
-                if self._are_related(ioc, other, threshold=2.0):
+                if self._are_related(ioc, other, threshold):
                     correlated_ids.add(other.id)
 
         return [i for i in all_iocs if i.id in correlated_ids]
@@ -86,24 +97,21 @@ class Correlator:
         }
 
     def _are_related(self, a: IOC, b: IOC, threshold: float) -> bool:
-        """Determine if two IOCs are related based on shared attributes."""
+        """Determine if two IOCs are related based on shared evidence."""
+        return self._relation_score(a, b) >= threshold
+
+    def _relation_score(self, a: IOC, b: IOC) -> float:
         score = 0.0
 
-        if a.type == b.type:
-            score += 1.0
-
-        if a.source == b.source:
-            score += 1.0
-
         if a.mitre_id and b.mitre_id and a.mitre_id == b.mitre_id:
-            score += 3.0
+            score += self.MITRE_WEIGHT
 
-        shared_tags = set(t.lower() for t in a.tags) & set(t.lower() for t in b.tags)
-        score += len(shared_tags) * 0.5
+        shared_tags = {t.lower() for t in a.tags} & {t.lower() for t in b.tags}
+        score += len(shared_tags) * self.TAG_WEIGHT
 
-        if a.severity and b.severity:
-            sev_diff = abs(a.severity - b.severity)
-            if sev_diff <= 1.0:
-                score += 0.5
+        if a.type == b.type:
+            score += self.CONTEXT_WEIGHT
+        if a.source == b.source:
+            score += self.CONTEXT_WEIGHT
 
-        return score >= threshold
+        return score

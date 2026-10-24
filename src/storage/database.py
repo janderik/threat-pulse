@@ -23,6 +23,8 @@ class Database:
 
         if not self._use_postgres:
             db_path = self._resolve_sqlite_path()
+            if db_path != ":memory:":
+                Path(db_path).parent.mkdir(parents=True, exist_ok=True)
             logger.info("Using SQLite database at: %s", db_path)
             self._conn = sqlite3.connect(db_path, check_same_thread=False)
             self._conn.row_factory = sqlite3.Row

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
@@ -79,7 +80,7 @@ class AbuseIPDBCollector(BaseCollector):
         domain = entry.get("domain")
         country = entry.get("countryCode")
         total_reports = entry.get("totalReports", 0)
-        last_reported = entry.get("lastReportedAt")
+        last_reported = self._parse_timestamp(entry.get("lastReportedAt"))
         is_whitelisted = entry.get("isWhitelisted", False)
 
         if is_whitelisted:
@@ -104,7 +105,19 @@ class AbuseIPDBCollector(BaseCollector):
             tags=tags,
             severity=severity,
             raw_data=entry,
+            **({"last_seen": last_reported} if last_reported else {}),
         )
+
+    @staticmethod
+    def _parse_timestamp(value: Optional[str]) -> Optional[datetime]:
+        """Parse AbuseIPDB's ISO 8601 timestamps (e.g. 2025-01-01T00:00:00+00:00)."""
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
     def _score_to_confidence(self, score: int) -> Confidence:
         if score >= 75:
