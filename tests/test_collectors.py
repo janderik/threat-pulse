@@ -142,7 +142,9 @@ class TestCustomFeedCollector:
         ]
         """
         collector = CustomFeedCollector({})
-        iocs = collector._parse_json(json_data, "test_feed", Confidence.MEDIUM, IOCType.IP, [], {})
+        iocs = collector._parse_json(
+            json_data, "test_feed", Confidence.MEDIUM, IOCType.IP, [], {}
+        )
         assert len(iocs) == 2
         assert iocs[0].value == "5.5.5.5"
         assert iocs[0].type == IOCType.IP
@@ -160,7 +162,9 @@ class TestCustomFeedCollector:
     def test_parse_csv(self):
         csv_data = "value,type,confidence\n6.6.6.6,ip,high\nmalware.net,domain,medium\n"
         collector = CustomFeedCollector({})
-        iocs = collector._parse_csv(csv_data, "csv_feed", Confidence.LOW, IOCType.IP, [], {})
+        iocs = collector._parse_csv(
+            csv_data, "csv_feed", Confidence.LOW, IOCType.IP, [], {}
+        )
         assert len(iocs) >= 1
         assert iocs[0].type == IOCType.IP
         if len(iocs) > 1:
@@ -175,7 +179,9 @@ class TestCustomFeedCollector:
           type: domain
         """
         collector = CustomFeedCollector({})
-        iocs = collector._parse_yaml(yaml_data, "yaml_feed", Confidence.MEDIUM, IOCType.IP, [], {})
+        iocs = collector._parse_yaml(
+            yaml_data, "yaml_feed", Confidence.MEDIUM, IOCType.IP, [], {}
+        )
         assert len(iocs) == 2
         assert iocs[0].confidence == Confidence.CRITICAL
         assert iocs[1].value == "bad.org"
@@ -187,7 +193,9 @@ class TestCustomFeedCollector:
             "type": "ip",
             "tags": "ransomware, c2, critical",
         }
-        ioc = collector._entry_to_ioc(entry, "test", Confidence.MEDIUM, None, ["global"], {})
+        ioc = collector._entry_to_ioc(
+            entry, "test", Confidence.MEDIUM, None, ["global"], {}
+        )
         assert "ransomware" in ioc.tags
         assert "c2" in ioc.tags
         assert "global" in ioc.tags
@@ -195,7 +203,9 @@ class TestCustomFeedCollector:
     def test_entry_to_ioc_defaults(self):
         collector = CustomFeedCollector({})
         entry = {"value": "unknown-ioc"}
-        ioc = collector._entry_to_ioc(entry, "test", Confidence.LOW, IOCType.HASH, ["auto"], {})
+        ioc = collector._entry_to_ioc(
+            entry, "test", Confidence.LOW, IOCType.HASH, ["auto"], {}
+        )
         assert ioc.value == "unknown-ioc"
         assert ioc.type == IOCType.HASH
         assert ioc.confidence == Confidence.LOW
@@ -203,7 +213,6 @@ class TestCustomFeedCollector:
 
 class TestIOCModel:
     def test_ioc_creation(self):
-        from datetime import datetime, timezone
         ioc = IOC(
             type=IOCType.IP,
             value="8.8.8.8",

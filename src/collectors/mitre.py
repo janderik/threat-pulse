@@ -86,10 +86,14 @@ class MitreAttackCollector(BaseCollector):
                 description=obj.get("description", "") or obj.get("name", ""),
                 source="mitre_attack",
                 confidence=Confidence.HIGH,
-                tags=["mitre", "attack-pattern", tactic] if tactic else ["mitre", "attack-pattern"],
+                tags=["mitre", "attack-pattern", tactic]
+                if tactic
+                else ["mitre", "attack-pattern"],
                 mitre_id=mitre_id,
                 severity=7.0,
-                reference_urls=[ref.get("url", "") for ref in external_refs if ref.get("url")],
+                reference_urls=[
+                    ref.get("url", "") for ref in external_refs if ref.get("url")
+                ],
                 raw_data=obj,
             )
             iocs.append(ioc)
@@ -123,7 +127,9 @@ class MitreAttackCollector(BaseCollector):
                 tags=["mitre", "software"],
                 mitre_id=mitre_id,
                 severity=6.0,
-                reference_urls=[ref.get("url", "") for ref in external_refs if ref.get("url")],
+                reference_urls=[
+                    ref.get("url", "") for ref in external_refs if ref.get("url")
+                ],
                 raw_data=obj,
             )
             iocs.append(ioc)
@@ -157,7 +163,9 @@ class MitreAttackCollector(BaseCollector):
                 tags=["mitre", "threat-group"],
                 mitre_id=mitre_id,
                 severity=8.0,
-                reference_urls=[ref.get("url", "") for ref in external_refs if ref.get("url")],
+                reference_urls=[
+                    ref.get("url", "") for ref in external_refs if ref.get("url")
+                ],
                 raw_data=obj,
             )
             iocs.append(ioc)
@@ -174,4 +182,5 @@ class MitreAttackCollector(BaseCollector):
 
 async def asyncio_gather(*aws, return_exceptions=True):
     import asyncio
+
     return await asyncio.gather(*aws, return_exceptions=return_exceptions)

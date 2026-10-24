@@ -4,7 +4,6 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime, timezone
 from typing import Optional
 
 from src.collectors.alienvault import AlienVaultOTXCollector
@@ -31,20 +30,28 @@ class ThreatPulseEngine:
         cfg = config or {}
         self.collectors = []
 
-        alienvault_key = cfg.get("alienvault_api_key") or os.getenv("ALIENVAULT_API_KEY", "")
+        alienvault_key = cfg.get("alienvault_api_key") or os.getenv(
+            "ALIENVAULT_API_KEY", ""
+        )
         if alienvault_key:
             self.collectors.append(AlienVaultOTXCollector({"api_key": alienvault_key}))
 
-        abuseipdb_key = cfg.get("abuseipdb_api_key") or os.getenv("ABUSEIPDB_API_KEY", "")
+        abuseipdb_key = cfg.get("abuseipdb_api_key") or os.getenv(
+            "ABUSEIPDB_API_KEY", ""
+        )
         if abuseipdb_key:
             self.collectors.append(AbuseIPDBCollector({"api_key": abuseipdb_key}))
 
         if cfg.get("mitre_enabled", True):
-            self.collectors.append(MitreAttackCollector({
-                "collect_techniques": cfg.get("mitre_collect_techniques", True),
-                "collect_software": cfg.get("mitre_collect_software", True),
-                "collect_groups": cfg.get("mitre_collect_groups", True),
-            }))
+            self.collectors.append(
+                MitreAttackCollector(
+                    {
+                        "collect_techniques": cfg.get("mitre_collect_techniques", True),
+                        "collect_software": cfg.get("mitre_collect_software", True),
+                        "collect_groups": cfg.get("mitre_collect_groups", True),
+                    }
+                )
+            )
 
         custom_feeds = cfg.get("custom_feeds", [])
         if custom_feeds:
@@ -109,6 +116,7 @@ def main():
 
     if mode == "server":
         import uvicorn
+
         uvicorn.run(
             "src.api.server:app",
             host=os.getenv("HOST", "0.0.0.0"),
@@ -119,11 +127,13 @@ def main():
         interval = int(os.getenv("COLLECTOR_INTERVAL_MINUTES", "15"))
         asyncio.run(collector_worker(interval))
     elif mode == "collect-once":
+
         async def run_once():
             engine = ThreatPulseEngine()
             engine.setup_collectors()
             await engine.run_collectors()
             engine.run_correlation()
+
         asyncio.run(run_once())
     else:
         print(f"Usage: {sys.argv[0]} [server|collect|collect-once]")

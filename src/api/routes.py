@@ -16,6 +16,7 @@ router = APIRouter()
 
 # --- Health ---
 
+
 @router.get("/health")
 async def health_check():
     return {
@@ -26,6 +27,7 @@ async def health_check():
 
 
 # --- IOC endpoints ---
+
 
 @router.post("/iocs", response_model=IocResponse, status_code=201)
 async def create_ioc(payload: IocCreate):
@@ -82,6 +84,7 @@ async def delete_ioc(ioc_id: str):
 
 # --- Threat endpoints ---
 
+
 @router.post("/threats", response_model=ThreatResponse, status_code=201)
 async def create_threat(payload: ThreatCreate):
     threat = Threat(
@@ -135,6 +138,7 @@ async def update_threat_status(threat_id: str, status: ThreatStatus):
         raise HTTPException(status_code=404, detail="Threat not found")
     threat = threat.model_copy(update={"status": status, "updated_at": None})
     from datetime import datetime, timezone
+
     threat.updated_at = datetime.now(timezone.utc)
     stored = db.store_threat(threat)
     return _threat_to_response(stored)
@@ -147,6 +151,7 @@ async def delete_threat(threat_id: str):
 
 
 # --- Search / Query ---
+
 
 @router.get("/search", response_model=dict)
 async def search_all(
@@ -164,6 +169,7 @@ async def search_all(
 
 # --- Stats ---
 
+
 @router.get("/stats")
 async def stats():
     return {
@@ -174,6 +180,7 @@ async def stats():
 
 # --- Serialization helpers ---
 
+
 def _ioc_to_response(ioc: IOC) -> IocResponse:
     return IocResponse(
         id=ioc.id,
@@ -183,8 +190,12 @@ def _ioc_to_response(ioc: IOC) -> IocResponse:
         source=ioc.source,
         confidence=ioc.confidence,
         tags=ioc.tags,
-        first_seen=ioc.first_seen.isoformat() if hasattr(ioc.first_seen, "isoformat") else str(ioc.first_seen),
-        last_seen=ioc.last_seen.isoformat() if hasattr(ioc.last_seen, "isoformat") else str(ioc.last_seen),
+        first_seen=ioc.first_seen.isoformat()
+        if hasattr(ioc.first_seen, "isoformat")
+        else str(ioc.first_seen),
+        last_seen=ioc.last_seen.isoformat()
+        if hasattr(ioc.last_seen, "isoformat")
+        else str(ioc.last_seen),
         severity=ioc.severity,
         mitre_id=ioc.mitre_id,
         reference_urls=ioc.reference_urls,
@@ -206,7 +217,11 @@ def _threat_to_response(threat: Threat) -> ThreatResponse:
         affected_systems=threat.affected_systems,
         actor=threat.actor,
         campaign=threat.campaign,
-        created_at=threat.created_at.isoformat() if hasattr(threat.created_at, "isoformat") else str(threat.created_at),
-        updated_at=threat.updated_at.isoformat() if hasattr(threat.updated_at, "isoformat") else str(threat.updated_at),
+        created_at=threat.created_at.isoformat()
+        if hasattr(threat.created_at, "isoformat")
+        else str(threat.created_at),
+        updated_at=threat.updated_at.isoformat()
+        if hasattr(threat.updated_at, "isoformat")
+        else str(threat.updated_at),
         tags=threat.tags,
     )

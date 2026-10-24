@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 
 from src.analyzer.scorer import ThreatScorer
 from src.analyzer.correlator import Correlator
@@ -13,27 +12,41 @@ class TestThreatScorer:
         self.scorer = ThreatScorer()
 
     def test_score_ioc_low_confidence(self):
-        ioc = IOC(type=IOCType.IP, value="1.1.1.1", confidence=Confidence.LOW, source="manual")
+        ioc = IOC(
+            type=IOCType.IP, value="1.1.1.1", confidence=Confidence.LOW, source="manual"
+        )
         score = self.scorer.score_ioc(ioc)
         assert 0.0 <= score <= 10.0
         assert score < 5.0
 
     def test_score_ioc_high_confidence(self):
-        ioc = IOC(type=IOCType.IP, value="2.2.2.2", confidence=Confidence.HIGH, source="mitre_attack")
+        ioc = IOC(
+            type=IOCType.IP,
+            value="2.2.2.2",
+            confidence=Confidence.HIGH,
+            source="mitre_attack",
+        )
         score = self.scorer.score_ioc(ioc)
         assert 0.0 <= score <= 10.0
         assert score > 0
 
     def test_score_ioc_cve_type(self):
-        ioc = IOC(type=IOCType.CVE, value="CVE-2024-1234", confidence=Confidence.CRITICAL, source="mitre_attack")
+        ioc = IOC(
+            type=IOCType.CVE,
+            value="CVE-2024-1234",
+            confidence=Confidence.CRITICAL,
+            source="mitre_attack",
+        )
         score = self.scorer.score_ioc(ioc)
         # CVE type has 2.0 multiplier, critical confidence is 10.0, mitre source is 1.0
         assert score > 5.0
 
     def test_score_ioc_tag_bonus(self):
         ioc = IOC(
-            type=IOCType.IP, value="3.3.3.3",
-            confidence=Confidence.LOW, source="custom",
+            type=IOCType.IP,
+            value="3.3.3.3",
+            confidence=Confidence.LOW,
+            source="custom",
             tags=["ransomware", "c2"],
         )
         score = self.scorer.score_ioc(ioc)
@@ -42,9 +55,12 @@ class TestThreatScorer:
 
     def test_score_ioc_clamps(self):
         ioc = IOC(
-            type=IOCType.CVE, value="CVE-2025-9999",
-            confidence=Confidence.CRITICAL, source="mitre_attack",
-            severity=10.0, tags=["ransomware", "apt", "critical", "botnet", "malware", "c2"],
+            type=IOCType.CVE,
+            value="CVE-2025-9999",
+            confidence=Confidence.CRITICAL,
+            source="mitre_attack",
+            severity=10.0,
+            tags=["ransomware", "apt", "critical", "botnet", "malware", "c2"],
         )
         score = self.scorer.score_ioc(ioc)
         assert score <= 10.0
@@ -57,10 +73,22 @@ class TestThreatScorer:
 
     def test_score_threat_with_iocs(self):
         iocs = [
-            IOC(type=IOCType.IP, value="1.1.1.1", confidence=Confidence.HIGH, source="mitre_attack"),
-            IOC(type=IOCType.DOMAIN, value="evil.com", confidence=Confidence.MEDIUM, source="manual"),
+            IOC(
+                type=IOCType.IP,
+                value="1.1.1.1",
+                confidence=Confidence.HIGH,
+                source="mitre_attack",
+            ),
+            IOC(
+                type=IOCType.DOMAIN,
+                value="evil.com",
+                confidence=Confidence.MEDIUM,
+                source="manual",
+            ),
         ]
-        threat = Threat(name="Campaign Alpha", source="manual", ioc_ids=[i.id for i in iocs])
+        threat = Threat(
+            name="Campaign Alpha", source="manual", ioc_ids=[i.id for i in iocs]
+        )
         score = self.scorer.score_threat(threat, iocs=iocs)
         assert 0.0 <= score <= 10.0
 
@@ -75,18 +103,26 @@ class TestThreatScorer:
         assert score < 5.0
 
     def test_confidence_weights(self):
-        assert self.scorer.CONFIDENCE_WEIGHTS[Confidence.LOW] < self.scorer.CONFIDENCE_WEIGHTS[Confidence.HIGH]
+        assert (
+            self.scorer.CONFIDENCE_WEIGHTS[Confidence.LOW]
+            < self.scorer.CONFIDENCE_WEIGHTS[Confidence.HIGH]
+        )
         assert self.scorer.CONFIDENCE_WEIGHTS[Confidence.CRITICAL] == 10.0
 
     def test_ioc_type_multipliers(self):
-        assert self.scorer.IOC_TYPE_MULTIPLIERS[IOCType.CVE] > self.scorer.IOC_TYPE_MULTIPLIERS[IOCType.IP]
+        assert (
+            self.scorer.IOC_TYPE_MULTIPLIERS[IOCType.CVE]
+            > self.scorer.IOC_TYPE_MULTIPLIERS[IOCType.IP]
+        )
 
 
 class TestCorrelator:
     def setup_method(self):
         self.correlator = Correlator()
 
-    def _make_ioc(self, ioc_id, ioc_type, source, tags=None, mitre_id=None, severity=5.0, value=""):
+    def _make_ioc(
+        self, ioc_id, ioc_type, source, tags=None, mitre_id=None, severity=5.0, value=""
+    ):
         return IOC(
             id=ioc_id,
             type=ioc_type,
@@ -100,7 +136,9 @@ class TestCorrelator:
     def test_correlate_iocs_shared_tags(self):
         iocs = [
             self._make_ioc("ioc-1", IOCType.IP, "abuseipdb", tags=["malware", "c2"]),
-            self._make_ioc("ioc-2", IOCType.DOMAIN, "alienvault_otx", tags=["malware", "c2"]),
+            self._make_ioc(
+                "ioc-2", IOCType.DOMAIN, "alienvault_otx", tags=["malware", "c2"]
+            ),
             self._make_ioc("ioc-3", IOCType.IP, "manual", tags=["benign"]),
         ]
         groups = self.correlator.correlate_iocs(iocs, threshold=1.0)
@@ -111,8 +149,12 @@ class TestCorrelator:
 
     def test_correlate_iocs_same_mitre_id(self):
         iocs = [
-            self._make_ioc("a", IOCType.URL, "mitre_attack", mitre_id="T1059", severity=7.0),
-            self._make_ioc("b", IOCType.URL, "mitre_attack", mitre_id="T1059", severity=8.0),
+            self._make_ioc(
+                "a", IOCType.URL, "mitre_attack", mitre_id="T1059", severity=7.0
+            ),
+            self._make_ioc(
+                "b", IOCType.URL, "mitre_attack", mitre_id="T1059", severity=8.0
+            ),
             self._make_ioc("c", IOCType.IP, "manual", mitre_id=None, severity=1.0),
         ]
         groups = self.correlator.correlate_iocs(iocs, threshold=1.0)
@@ -138,7 +180,9 @@ class TestCorrelator:
         unrelated_ioc = self._make_ioc("t3", IOCType.URL, "manual", tags=["benign"])
 
         threat = Threat(id="thr-1", name="Test", ioc_ids=["t1"])
-        result = self.correlator.correlate_with_threat(threat, [threat_ioc, related_ioc, unrelated_ioc])
+        result = self.correlator.correlate_with_threat(
+            threat, [threat_ioc, related_ioc, unrelated_ioc]
+        )
         assert "t2" in [i.id for i in result]
         assert "t3" not in [i.id for i in result]
 

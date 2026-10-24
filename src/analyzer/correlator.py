@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from typing import Optional
 
 from src.models.ioc import IOC, IOCType
 from src.models.threat import Threat
@@ -13,7 +12,9 @@ logger = logging.getLogger(__name__)
 class Correlator:
     """Correlates IOCs and threats to find related entities."""
 
-    def correlate_iocs(self, iocs: list[IOC], threshold: float = 3.0) -> list[list[str]]:
+    def correlate_iocs(
+        self, iocs: list[IOC], threshold: float = 3.0
+    ) -> list[list[str]]:
         """Group related IOCs by shared attributes. Returns list of IOC ID groups."""
         groups: list[set[str]] = []
         grouped_ids: set[str] = set()
