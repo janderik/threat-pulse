@@ -3,9 +3,9 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field, IPvAnyAddress, HttpUrl
+from pydantic import BaseModel, Field
 
 
 class IOCType(str, enum.Enum):
@@ -40,16 +40,16 @@ class IOC(BaseModel):
     severity: float = Field(default=5.0, ge=0.0, le=10.0)
     mitre_id: Optional[str] = None
     reference_urls: list[str] = Field(default_factory=list)
-    raw_data: Optional[dict] = None
+    raw_data: Optional[Dict[str, Any]] = None
     active: bool = True
 
-    def dict(self, *args, **kwargs):
-        d = super().dict(*args, **kwargs)
-        if "first_seen" in d and isinstance(d["first_seen"], datetime):
-            d["first_seen"] = d["first_seen"].isoformat()
-        if "last_seen" in d and isinstance(d["last_seen"], datetime):
-            d["last_seen"] = d["last_seen"].isoformat()
-        return d
+    def dict(self, **kwargs: Any) -> Dict[str, Any]:  # type: ignore[override]
+        """JSON-ready dict (datetimes as ISO strings, enums as values).
+
+        Note: a method named ``dict`` shadows the builtin inside this class,
+        so field annotations here must use ``typing.Dict``.
+        """
+        return self.model_dump(mode="json", **kwargs)
 
 
 class IocCreate(BaseModel):

@@ -47,12 +47,7 @@ class ThreatScorer:
         source_reputation = self.SOURCE_REPUTATION.get(ioc.source, 0.7)
         tag_bonus = self._compute_tag_bonus(ioc.tags)
 
-        raw_score = (
-            confidence_score
-            * type_multiplier
-            * source_reputation
-            + tag_bonus
-        )
+        raw_score = confidence_score * type_multiplier * source_reputation + tag_bonus
 
         return round(min(10.0, max(0.0, raw_score)), 2)
 
@@ -70,17 +65,21 @@ class ThreatScorer:
         status_penalty = self._status_penalty(threat.status)
 
         raw_score = (
-            avg_ioc_score * 0.5
-            + num_iocs_factor
-            + mitre_bonus
-            + tag_bonus
+            avg_ioc_score * 0.5 + num_iocs_factor + mitre_bonus + tag_bonus
         ) * status_penalty
 
         return round(min(10.0, max(0.0, raw_score)), 2)
 
     def _compute_tag_bonus(self, tags: list[str]) -> float:
         bonus = 0.0
-        high_severity_tags = {"ransomware", "apt", "malware", "c2", "botnet", "critical"}
+        high_severity_tags = {
+            "ransomware",
+            "apt",
+            "malware",
+            "c2",
+            "botnet",
+            "critical",
+        }
         for tag in tags:
             if tag.lower() in high_severity_tags:
                 bonus += 0.5

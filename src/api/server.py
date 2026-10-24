@@ -7,19 +7,18 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.routes import router
-from src.storage.database import Database
+from src.api.state import close_db, get_db
 
 logger = logging.getLogger(__name__)
-
-db: Database = Database()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("ThreatPulse API starting up")
+    get_db()  # open the database at startup, not at import time
     yield
     logger.info("ThreatPulse API shutting down")
-    db.close()
+    close_db()
 
 
 app = FastAPI(

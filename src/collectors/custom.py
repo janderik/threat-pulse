@@ -43,7 +43,9 @@ class CustomFeedCollector(BaseCollector):
                 feed_iocs = await self._process_feed(feed)
                 iocs.extend(feed_iocs)
             except Exception as e:
-                self.logger.exception("Error processing feed %s: %s", feed.get("name", "unknown"), e)
+                self.logger.exception(
+                    "Error processing feed %s: %s", feed.get("name", "unknown"), e
+                )
 
         return iocs
 
@@ -53,7 +55,9 @@ class CustomFeedCollector(BaseCollector):
         file_path = feed.get("file_path", "")
         format_type = feed.get("format", "json")
         default_confidence = Confidence(feed.get("confidence", "medium"))
-        default_type = IOCType(feed.get("ioc_type", "ip")) if feed.get("ioc_type") else None
+        default_type = (
+            IOCType(feed.get("ioc_type", "ip")) if feed.get("ioc_type") else None
+        )
         default_tags = feed.get("tags", [])
 
         raw_data = await self._fetch_source(url, file_path)
@@ -107,11 +111,32 @@ class CustomFeedCollector(BaseCollector):
         feed_config: dict,
     ) -> list[IOC]:
         if format_type == "json":
-            return self._parse_json(raw_data, source_name, default_confidence, default_type, default_tags, feed_config)
+            return self._parse_json(
+                raw_data,
+                source_name,
+                default_confidence,
+                default_type,
+                default_tags,
+                feed_config,
+            )
         elif format_type == "yaml":
-            return self._parse_yaml(raw_data, source_name, default_confidence, default_type, default_tags, feed_config)
+            return self._parse_yaml(
+                raw_data,
+                source_name,
+                default_confidence,
+                default_type,
+                default_tags,
+                feed_config,
+            )
         elif format_type == "csv":
-            return self._parse_csv(raw_data, source_name, default_confidence, default_type, default_tags, feed_config)
+            return self._parse_csv(
+                raw_data,
+                source_name,
+                default_confidence,
+                default_type,
+                default_tags,
+                feed_config,
+            )
         else:
             self.logger.warning("Unsupported format: %s", format_type)
             return []
@@ -131,11 +156,17 @@ class CustomFeedCollector(BaseCollector):
             self.logger.error("Invalid JSON: %s", e)
             return []
 
-        items = data if isinstance(data, list) else data.get("iocs", data.get("indicators", [data]))
+        items = (
+            data
+            if isinstance(data, list)
+            else data.get("iocs", data.get("indicators", [data]))
+        )
         if isinstance(items, dict):
             items = [items]
 
-        return [self._entry_to_ioc(e, source, conf, default_type, tags, feed) for e in items]
+        return [
+            self._entry_to_ioc(e, source, conf, default_type, tags, feed) for e in items
+        ]
 
     def _parse_yaml(
         self,
@@ -152,11 +183,17 @@ class CustomFeedCollector(BaseCollector):
             self.logger.error("Invalid YAML: %s", e)
             return []
 
-        items = data if isinstance(data, list) else data.get("iocs", data.get("indicators", [data]))
+        items = (
+            data
+            if isinstance(data, list)
+            else data.get("iocs", data.get("indicators", [data]))
+        )
         if isinstance(items, dict):
             items = [items]
 
-        return [self._entry_to_ioc(e, source, conf, default_type, tags, feed) for e in items]
+        return [
+            self._entry_to_ioc(e, source, conf, default_type, tags, feed) for e in items
+        ]
 
     def _parse_csv(
         self,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 import pytest
 
 from src.collectors.alienvault import AlienVaultOTXCollector
@@ -15,11 +16,12 @@ class TestAlienVaultCollector:
         assert collector.name == "alienvault_otx"
         assert collector.api_key == "test-key"
 
-    def test_no_api_key(self):
+    @pytest.mark.asyncio
+    async def test_no_api_key(self):
         collector = AlienVaultOTXCollector({})
-        iocs = pytest.mark.asyncio(collector.collect)()
-        # This would be async - we'll test the logic in following tests
         assert collector.api_key == ""
+        # Without a key the collector must skip the network call entirely.
+        assert await collector.collect() == []
 
     def test_map_type(self):
         collector = AlienVaultOTXCollector({})
@@ -93,6 +95,7 @@ class TestAbuseIPDBCollector:
         assert ioc.confidence == Confidence.HIGH
         assert "country:US" in ioc.tags
         assert ioc.severity == 8.5
+        assert ioc.last_seen.isoformat() == "2025-01-01T00:00:00+00:00"
 
     def test_parse_entry_whitelisted(self):
         collector = AbuseIPDBCollector({})
@@ -129,6 +132,73 @@ class TestMitreCollector:
         assert collector._extract_tactic({}) == ""
 
 
+def _attack(obj_type, mitre_id, name, **extra):
+    refs = (
+        [
+            {
+                "source_name": "mitre-attack",
+                "external_id": mitre_id,
+                "url": f"https://attack.mitre.org/x/{mitre_id}",
+            }
+        ]
+        if mitre_id
+        else []
+    )
+    return {"type": obj_type, "name": name, "external_references": refs, **extra}
+
+
+ATTACK_BUNDLE = {
+    "type": "bundle",
+    "objects": [
+        _attack(
+            "attack-pattern",
+            "T1059.001",
+            "PowerShell",
+            kill_chain_phases=[
+                {"kill_chain_name": "mitre-attack", "phase_name": "execution"}
+            ],
+        ),
+        _attack("attack-pattern", "T9999", "Old technique", revoked=True),
+        _attack("attack-pattern", "T9998", "Deprecated", x_mitre_deprecated=True),
+        _attack("attack-pattern", "", "No ATT&CK id"),
+        _attack("malware", "S0002", "Mimikatz"),
+        _attack("tool", "S0039", "Net"),
+        _attack("intrusion-set", "G0007", "APT28"),
+    ],
+}
+
+
+@pytest.mark.asyncio
+async def test_mitre_collect_parses_bundle_with_single_download():
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url)
+        return httpx.Response(200, json=ATTACK_BUNDLE)
+
+    collector = MitreAttackCollector({})
+    collector._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    iocs = await collector.collect()
+
+    assert len(requests) == 1
+    by_id = {i.mitre_id: i for i in iocs}
+    assert set(by_id) == {"T1059.001", "S0002", "S0039", "G0007"}
+    assert by_id["T1059.001"].value == "https://attack.mitre.org/techniques/T1059/001/"
+    assert "execution" in by_id["T1059.001"].tags
+    assert by_id["S0002"].value == "https://attack.mitre.org/software/S0002/"
+    assert "malware" in by_id["S0002"].tags
+    assert by_id["G0007"].value == "https://attack.mitre.org/groups/G0007/"
+
+
+@pytest.mark.asyncio
+async def test_mitre_collect_survives_download_failure():
+    collector = MitreAttackCollector({})
+    collector._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(503))
+    )
+    assert await collector.collect() == []
+
+
 class TestCustomFeedCollector:
     def test_init(self):
         collector = CustomFeedCollector({"feeds": []})
@@ -142,7 +212,9 @@ class TestCustomFeedCollector:
         ]
         """
         collector = CustomFeedCollector({})
-        iocs = collector._parse_json(json_data, "test_feed", Confidence.MEDIUM, IOCType.IP, [], {})
+        iocs = collector._parse_json(
+            json_data, "test_feed", Confidence.MEDIUM, IOCType.IP, [], {}
+        )
         assert len(iocs) == 2
         assert iocs[0].value == "5.5.5.5"
         assert iocs[0].type == IOCType.IP
@@ -160,7 +232,9 @@ class TestCustomFeedCollector:
     def test_parse_csv(self):
         csv_data = "value,type,confidence\n6.6.6.6,ip,high\nmalware.net,domain,medium\n"
         collector = CustomFeedCollector({})
-        iocs = collector._parse_csv(csv_data, "csv_feed", Confidence.LOW, IOCType.IP, [], {})
+        iocs = collector._parse_csv(
+            csv_data, "csv_feed", Confidence.LOW, IOCType.IP, [], {}
+        )
         assert len(iocs) >= 1
         assert iocs[0].type == IOCType.IP
         if len(iocs) > 1:
@@ -175,7 +249,9 @@ class TestCustomFeedCollector:
           type: domain
         """
         collector = CustomFeedCollector({})
-        iocs = collector._parse_yaml(yaml_data, "yaml_feed", Confidence.MEDIUM, IOCType.IP, [], {})
+        iocs = collector._parse_yaml(
+            yaml_data, "yaml_feed", Confidence.MEDIUM, IOCType.IP, [], {}
+        )
         assert len(iocs) == 2
         assert iocs[0].confidence == Confidence.CRITICAL
         assert iocs[1].value == "bad.org"
@@ -187,7 +263,9 @@ class TestCustomFeedCollector:
             "type": "ip",
             "tags": "ransomware, c2, critical",
         }
-        ioc = collector._entry_to_ioc(entry, "test", Confidence.MEDIUM, None, ["global"], {})
+        ioc = collector._entry_to_ioc(
+            entry, "test", Confidence.MEDIUM, None, ["global"], {}
+        )
         assert "ransomware" in ioc.tags
         assert "c2" in ioc.tags
         assert "global" in ioc.tags
@@ -195,7 +273,9 @@ class TestCustomFeedCollector:
     def test_entry_to_ioc_defaults(self):
         collector = CustomFeedCollector({})
         entry = {"value": "unknown-ioc"}
-        ioc = collector._entry_to_ioc(entry, "test", Confidence.LOW, IOCType.HASH, ["auto"], {})
+        ioc = collector._entry_to_ioc(
+            entry, "test", Confidence.LOW, IOCType.HASH, ["auto"], {}
+        )
         assert ioc.value == "unknown-ioc"
         assert ioc.type == IOCType.HASH
         assert ioc.confidence == Confidence.LOW
@@ -203,7 +283,6 @@ class TestCustomFeedCollector:
 
 class TestIOCModel:
     def test_ioc_creation(self):
-        from datetime import datetime, timezone
         ioc = IOC(
             type=IOCType.IP,
             value="8.8.8.8",

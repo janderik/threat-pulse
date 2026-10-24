@@ -23,6 +23,8 @@ class Database:
 
         if not self._use_postgres:
             db_path = self._resolve_sqlite_path()
+            if db_path != ":memory:":
+                Path(db_path).parent.mkdir(parents=True, exist_ok=True)
             logger.info("Using SQLite database at: %s", db_path)
             self._conn = sqlite3.connect(db_path, check_same_thread=False)
             self._conn.row_factory = sqlite3.Row
@@ -33,7 +35,7 @@ class Database:
 
     def _resolve_sqlite_path(self) -> str:
         if self.db_url and self.db_url.startswith("sqlite:///"):
-            return self.db_url[len("sqlite:///"):]
+            return self.db_url[len("sqlite:///") :]
         return str(Path("data") / "threatpulse.db")
 
     def _init_sqlite(self):
@@ -90,9 +92,11 @@ class Database:
     def _init_postgres(self):
         try:
             from sqlalchemy import create_engine, text
+
             self._pg_engine = create_engine(self.db_url)
             with self._pg_engine.connect() as conn:
-                conn.execute(text("""
+                conn.execute(
+                    text("""
                     CREATE TABLE IF NOT EXISTS iocs (
                         id VARCHAR(36) PRIMARY KEY,
                         type VARCHAR(20) NOT NULL,
@@ -137,10 +141,13 @@ class Database:
                     CREATE INDEX IF NOT EXISTS idx_threats_name ON threats(name);
                     CREATE INDEX IF NOT EXISTS idx_threats_status ON threats(status);
                     CREATE INDEX IF NOT EXISTS idx_threats_score ON threats(score);
-                """))
+                """)
+                )
                 conn.commit()
         except Exception as e:
-            logger.error("Failed to initialize PostgreSQL: %s. Falling back to SQLite.", e)
+            logger.error(
+                "Failed to initialize PostgreSQL: %s. Falling back to SQLite.", e
+            )
             self._use_postgres = False
             db_path = self._resolve_sqlite_path()
             self._conn = sqlite3.connect(db_path, check_same_thread=False)
@@ -162,11 +169,17 @@ class Database:
                 first_seen, last_seen, severity, mitre_id, reference_urls, raw_data, active)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                ioc.id, ioc.type.value, ioc.value, ioc.description,
-                ioc.source, ioc.confidence.value,
+                ioc.id,
+                ioc.type.value,
+                ioc.value,
+                ioc.description,
+                ioc.source,
+                ioc.confidence.value,
                 json.dumps(ioc.tags),
-                ioc.first_seen.isoformat(), ioc.last_seen.isoformat(),
-                ioc.severity, ioc.mitre_id,
+                ioc.first_seen.isoformat(),
+                ioc.last_seen.isoformat(),
+                ioc.severity,
+                ioc.mitre_id,
                 json.dumps(ioc.reference_urls),
                 json.dumps(ioc.raw_data) if ioc.raw_data else None,
                 1 if ioc.active else 0,
@@ -178,6 +191,7 @@ class Database:
 
     def _store_ioc_pg(self, ioc: IOC) -> IOC:
         from sqlalchemy import text
+
         with self._pg_engine.connect() as conn:
             conn.execute(
                 text("""INSERT INTO iocs
@@ -190,13 +204,17 @@ class Database:
                         severity = EXCLUDED.severity,
                         active = EXCLUDED.active"""),
                 {
-                    "id": ioc.id, "type": ioc.type.value, "value": ioc.value,
-                    "desc": ioc.description, "src": ioc.source,
+                    "id": ioc.id,
+                    "type": ioc.type.value,
+                    "value": ioc.value,
+                    "desc": ioc.description,
+                    "src": ioc.source,
                     "conf": ioc.confidence.value,
                     "tags": json.dumps(ioc.tags),
                     "first": ioc.first_seen.isoformat(),
                     "last": ioc.last_seen.isoformat(),
-                    "sev": ioc.severity, "mitre": ioc.mitre_id,
+                    "sev": ioc.severity,
+                    "mitre": ioc.mitre_id,
                     "refs": json.dumps(ioc.reference_urls),
                     "raw": json.dumps(ioc.raw_data) if ioc.raw_data else None,
                     "active": ioc.active,
@@ -222,8 +240,11 @@ class Database:
 
     def _get_ioc_pg(self, ioc_id: str) -> Optional[IOC]:
         from sqlalchemy import text
+
         with self._pg_engine.connect() as conn:
-            row = conn.execute(text("SELECT * FROM iocs WHERE id = :id"), {"id": ioc_id}).fetchone()
+            row = conn.execute(
+                text("SELECT * FROM iocs WHERE id = :id"), {"id": ioc_id}
+            ).fetchone()
             if row is None:
                 return None
             return self._pg_row_to_ioc(row._mapping)
@@ -239,8 +260,12 @@ class Database:
         offset: int = 0,
     ) -> list[IOC]:
         if self._use_postgres:
-            return self._search_iocs_pg(value, ioc_type, source, confidence, active_only, limit, offset)
-        return self._search_iocs_sqlite(value, ioc_type, source, confidence, active_only, limit, offset)
+            return self._search_iocs_pg(
+                value, ioc_type, source, confidence, active_only, limit, offset
+            )
+        return self._search_iocs_sqlite(
+            value, ioc_type, source, confidence, active_only, limit, offset
+        )
 
     def _search_iocs_sqlite(
         self, value, ioc_type, source, confidence, active_only, limit, offset
@@ -272,8 +297,11 @@ class Database:
         cur.close()
         return [self._row_to_ioc(r) for r in rows]
 
-    def _search_iocs_pg(self, value, ioc_type, source, confidence, active_only, limit, offset):
+    def _search_iocs_pg(
+        self, value, ioc_type, source, confidence, active_only, limit, offset
+    ):
         from sqlalchemy import text
+
         query = "SELECT * FROM iocs WHERE 1=1"
         params = {}
 
@@ -302,8 +330,11 @@ class Database:
     def delete_ioc(self, ioc_id: str) -> bool:
         if self._use_postgres:
             from sqlalchemy import text
+
             with self._pg_engine.connect() as conn:
-                result = conn.execute(text("DELETE FROM iocs WHERE id = :id"), {"id": ioc_id})
+                result = conn.execute(
+                    text("DELETE FROM iocs WHERE id = :id"), {"id": ioc_id}
+                )
                 conn.commit()
                 return result.rowcount > 0
 
@@ -317,6 +348,7 @@ class Database:
     def count_iocs(self) -> int:
         if self._use_postgres:
             from sqlalchemy import text
+
             with self._pg_engine.connect() as conn:
                 row = conn.execute(text("SELECT COUNT(*) as cnt FROM iocs")).fetchone()
                 return row._mapping["cnt"]
@@ -343,13 +375,22 @@ class Database:
                 created_at, updated_at, tags, notes, raw_data)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                threat.id, threat.name, threat.description,
-                threat.status.value, threat.source,
-                json.dumps(threat.ioc_ids), json.dumps(threat.mitre_techniques),
-                threat.mitre_tactic, threat.score,
-                json.dumps(threat.affected_systems), threat.actor, threat.campaign,
-                threat.created_at.isoformat(), threat.updated_at.isoformat(),
-                json.dumps(threat.tags), json.dumps(threat.notes),
+                threat.id,
+                threat.name,
+                threat.description,
+                threat.status.value,
+                threat.source,
+                json.dumps(threat.ioc_ids),
+                json.dumps(threat.mitre_techniques),
+                threat.mitre_tactic,
+                threat.score,
+                json.dumps(threat.affected_systems),
+                threat.actor,
+                threat.campaign,
+                threat.created_at.isoformat(),
+                threat.updated_at.isoformat(),
+                json.dumps(threat.tags),
+                json.dumps(threat.notes),
                 json.dumps(threat.raw_data) if threat.raw_data else None,
             ),
         )
@@ -359,6 +400,7 @@ class Database:
 
     def _store_threat_pg(self, threat: Threat) -> Threat:
         from sqlalchemy import text
+
         with self._pg_engine.connect() as conn:
             conn.execute(
                 text("""INSERT INTO threats
@@ -373,16 +415,22 @@ class Database:
                         score = EXCLUDED.score,
                         updated_at = EXCLUDED.updated_at"""),
                 {
-                    "id": threat.id, "name": threat.name, "desc": threat.description,
-                    "status": threat.status.value, "src": threat.source,
+                    "id": threat.id,
+                    "name": threat.name,
+                    "desc": threat.description,
+                    "status": threat.status.value,
+                    "src": threat.source,
                     "ioc_ids": json.dumps(threat.ioc_ids),
                     "mitre_techs": json.dumps(threat.mitre_techniques),
-                    "mitre_tactic": threat.mitre_tactic, "score": threat.score,
+                    "mitre_tactic": threat.mitre_tactic,
+                    "score": threat.score,
                     "affected": json.dumps(threat.affected_systems),
-                    "actor": threat.actor, "campaign": threat.campaign,
+                    "actor": threat.actor,
+                    "campaign": threat.campaign,
                     "created": threat.created_at.isoformat(),
                     "updated": threat.updated_at.isoformat(),
-                    "tags": json.dumps(threat.tags), "notes": json.dumps(threat.notes),
+                    "tags": json.dumps(threat.tags),
+                    "notes": json.dumps(threat.notes),
                     "raw": json.dumps(threat.raw_data) if threat.raw_data else None,
                 },
             )
@@ -403,8 +451,11 @@ class Database:
 
     def _get_threat_pg(self, threat_id: str) -> Optional[Threat]:
         from sqlalchemy import text
+
         with self._pg_engine.connect() as conn:
-            row = conn.execute(text("SELECT * FROM threats WHERE id = :id"), {"id": threat_id}).fetchone()
+            row = conn.execute(
+                text("SELECT * FROM threats WHERE id = :id"), {"id": threat_id}
+            ).fetchone()
             if row is None:
                 return None
             return self._pg_row_to_threat(row._mapping)
@@ -419,8 +470,12 @@ class Database:
         offset: int = 0,
     ) -> list[Threat]:
         if self._use_postgres:
-            return self._search_threats_pg(name, status, source, min_score, limit, offset)
-        return self._search_threats_sqlite(name, status, source, min_score, limit, offset)
+            return self._search_threats_pg(
+                name, status, source, min_score, limit, offset
+            )
+        return self._search_threats_sqlite(
+            name, status, source, min_score, limit, offset
+        )
 
     def _search_threats_sqlite(self, name, status, source, min_score, limit, offset):
         query = "SELECT * FROM threats WHERE score >= ?"
@@ -447,6 +502,7 @@ class Database:
 
     def _search_threats_pg(self, name, status, source, min_score, limit, offset):
         from sqlalchemy import text
+
         query = "SELECT * FROM threats WHERE score >= :min_score"
         params = {"min_score": min_score}
 
@@ -470,8 +526,11 @@ class Database:
     def delete_threat(self, threat_id: str) -> bool:
         if self._use_postgres:
             from sqlalchemy import text
+
             with self._pg_engine.connect() as conn:
-                result = conn.execute(text("DELETE FROM threats WHERE id = :id"), {"id": threat_id})
+                result = conn.execute(
+                    text("DELETE FROM threats WHERE id = :id"), {"id": threat_id}
+                )
                 conn.commit()
                 return result.rowcount > 0
 
@@ -485,8 +544,11 @@ class Database:
     def count_threats(self) -> int:
         if self._use_postgres:
             from sqlalchemy import text
+
             with self._pg_engine.connect() as conn:
-                row = conn.execute(text("SELECT COUNT(*) as cnt FROM threats")).fetchone()
+                row = conn.execute(
+                    text("SELECT COUNT(*) as cnt FROM threats")
+                ).fetchone()
                 return row._mapping["cnt"]
 
         cur = self._conn.cursor()
@@ -510,7 +572,9 @@ class Database:
             last_seen=row["last_seen"],
             severity=row["severity"],
             mitre_id=row["mitre_id"],
-            reference_urls=json.loads(row["reference_urls"]) if row["reference_urls"] else [],
+            reference_urls=json.loads(row["reference_urls"])
+            if row["reference_urls"]
+            else [],
             raw_data=json.loads(row["raw_data"]) if row["raw_data"] else None,
             active=bool(row["active"]),
         )
@@ -523,13 +587,19 @@ class Database:
             description=row.get("description"),
             source=row["source"],
             confidence=Confidence(row["confidence"]),
-            tags=json.loads(row["tags"]) if isinstance(row["tags"], str) else row["tags"],
+            tags=json.loads(row["tags"])
+            if isinstance(row["tags"], str)
+            else row["tags"],
             first_seen=row["first_seen"],
             last_seen=row["last_seen"],
             severity=row["severity"],
             mitre_id=row.get("mitre_id"),
-            reference_urls=json.loads(row["reference_urls"]) if isinstance(row["reference_urls"], str) else row["reference_urls"],
-            raw_data=json.loads(row["raw_data"]) if isinstance(row["raw_data"], str) else row["raw_data"],
+            reference_urls=json.loads(row["reference_urls"])
+            if isinstance(row["reference_urls"], str)
+            else row["reference_urls"],
+            raw_data=json.loads(row["raw_data"])
+            if isinstance(row["raw_data"], str)
+            else row["raw_data"],
             active=bool(row["active"]),
         )
 
@@ -560,17 +630,27 @@ class Database:
             description=row.get("description"),
             status=ThreatStatus(row["status"]),
             source=row["source"],
-            ioc_ids=json.loads(row["ioc_ids"]) if isinstance(row["ioc_ids"], str) else row["ioc_ids"],
-            mitre_techniques=json.loads(row["mitre_techniques"]) if isinstance(row["mitre_techniques"], str) else row["mitre_techniques"],
+            ioc_ids=json.loads(row["ioc_ids"])
+            if isinstance(row["ioc_ids"], str)
+            else row["ioc_ids"],
+            mitre_techniques=json.loads(row["mitre_techniques"])
+            if isinstance(row["mitre_techniques"], str)
+            else row["mitre_techniques"],
             mitre_tactic=row.get("mitre_tactic"),
             score=row["score"],
-            affected_systems=json.loads(row["affected_systems"]) if isinstance(row["affected_systems"], str) else row["affected_systems"],
+            affected_systems=json.loads(row["affected_systems"])
+            if isinstance(row["affected_systems"], str)
+            else row["affected_systems"],
             actor=row.get("actor"),
             campaign=row.get("campaign"),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
-            tags=json.loads(row["tags"]) if isinstance(row["tags"], str) else row["tags"],
-            notes=json.loads(row["notes"]) if isinstance(row["notes"], str) else row["notes"],
+            tags=json.loads(row["tags"])
+            if isinstance(row["tags"], str)
+            else row["tags"],
+            notes=json.loads(row["notes"])
+            if isinstance(row["notes"], str)
+            else row["notes"],
         )
 
     def close(self):
